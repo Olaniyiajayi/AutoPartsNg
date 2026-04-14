@@ -1,0 +1,546 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: |
+  SP-Integration Sample SAM Template for SP-Integration
+
+Parameters:
+  Stage:
+    Type: String
+    Description: The deployment stage (e.g., main)
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 15
+    MemorySize: 1408
+    Layers:
+      - !Ref SpLayer
+    Runtime: nodejs22.x
+    Tracing: Active
+    # You can add LoggingConfig parameters such as the Logformat, Log Group, and SystemLogLevel or ApplicationLogLevel. Learn more here https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-loggingconfig.
+    LoggingConfig:
+      LogFormat: JSON
+    Environment:
+      Variables:
+        Stage: !Sub ${Stage}
+        MANAGE_INVENTORY_TABLE: manageInventory
+        MANAGE_SKU_TABLE: manageSku
+        MANAGE_ORDER_TABLE: manageOrder
+        MANAGE_ORDER_ITEM_TABLE: manageOrderItems
+        PROCESSED_DATA_SQS_URL: !Sub ${ProcessedDataQueue}
+        # PROCESSED_DATA_SQS_URL: https://sqs.us-east-1.amazonaws.com/693920098032/prod-processed-data-queue.fifo
+        FEED_PROCESSING_SQS_ARN: !GetAtt FeedProcessingQueue.Arn
+        # FEED_PROCESSING_SQS_ARN: arn:aws:sqs:us-east-1:693920098032:prod-feed-processing-queue
+        CREATE_ORDER_SQS_URL: !Sub ${CreateOrderQueue}
+        # CREATE_ORDER_SQS_URL: https://sqs.us-east-1.amazonaws.com/693920098032/prod-create-order-queue.fifo
+        DDI_USERNAME: DCKAP
+        DDI_PASSWORD: 7ANDCrP6QYeyemJu
+        DDI_PASSPHRASE: QMZpnJJGcotDjXu73WXsBzjM6WDk30tuP9LkqcyHnFLge4aO5XAxAQbI7bXHv17X
+        DDI_CONTACTNAME: jkolman@tristatelvs.com
+        SP_REGION: na
+        SP_REFRESH_TOKEN: Atzr|IwEBIHOymubOAEOCrCjsmY87vp48jYoYrrKbRGZl_zZ6gr8TtTRxXLlCeNbDO4hI2flfrYHQWXRWnL-po1G5wPf1cOHUbtcNWLet1USgtKym1LNy68_WVz0uo-y8tk8bBy0L03CDBsyg_u1E5q7t9Le6S41AkQhnwSnlqXsuULWIKIYehH1d7gUIHvhqaRBpSuvN3TBTY_-81oJ6jQRxKeQv56Q4f4bp_T6MJa6WPssf0Quwp_d6sdEp7mYw3eflLi-t6UcA5eKbM9DUqf9SwWg4Tc89n2_Icz0anYJabuFIqS-9kuR_sIlavM5RDw9QEpYN1Y0
+        SP_APP_CLIENT_ID: amzn1.application-oa2-client.249e6cce6f224481b875b581d0bdbf5f
+        SP_APP_CLIENT_SECRET: amzn1.oa2-cs.v1.e43aa603986b5bc18996a231bf6855ea81bab4732cd37738a8fe2917e3a94d49
+        SP_SELLER_ID: A175CPO7VUAYDU
+        SP_MARKETPLACE_ID: ATVPDKIKX0DER
+  Api:
+    TracingEnabled: true
+
+Resources:
+  # ------------------------------------------------------------------------------------
+  # DynamoDB Database table Resources
+  # ------------------------------------------------------------------------------------
+
+  # Amazon inventory feed transaction details database table
+  ManageInventoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: manageInventory
+      AttributeDefinitions:
+        - AttributeName: sku
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sku
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # Manage SKU's to update specified inventory
+  ManageSkuTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: manageSku
+      AttributeDefinitions:
+        - AttributeName: sellerSku
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sellerSku
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # Manage Order to create in DDI
+  ManageOrderTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: manageOrder
+      AttributeDefinitions:
+        - AttributeName: orderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: orderId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # Manage Order Item to create order in DDI
+  ManageOrderItemsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: manageOrderItems
+      AttributeDefinitions:
+        - AttributeName: orderId
+          AttributeType: S
+        - AttributeName: orderItemId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: orderId # Primary Key
+          KeyType: HASH # Partition Key
+        - AttributeName: orderItemId
+          KeyType: RANGE # Sort Key
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: orderItemId-index
+          KeySchema:
+            - AttributeName: orderItemId # GSI Partition Key
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL # Store all attributes in the GSI
+      SSESpecification:
+        SSEEnabled: true # Enable encryption at rest
+
+  # ------------------------------------------------------------------------------------
+  # Queue Resources
+  # ------------------------------------------------------------------------------------
+
+  # Data Processing SQS Queue Resource
+  ProcessedDataQueue:
+    Type: AWS::SQS::Queue
+    DependsOn: ProcessedDataDeadLetterQueue
+    Properties:
+      QueueName: !Sub ${Stage}-processed-data-queue.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ProcessedDataDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  # Data Processing Dead Letter Queue Resource
+  ProcessedDataDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${Stage}-processed-data-dlqueue.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600
+
+  # Create Order SQS Queue Resource
+  CreateOrderQueue:
+    Type: AWS::SQS::Queue
+    DependsOn: CreateOrderDeadLetterQueue
+    Properties:
+      QueueName: !Sub ${Stage}-create-order-queue.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CreateOrderDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  # Create Order Dead Letter Queue Resource
+  CreateOrderDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${Stage}-create-order-dlqueue.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600
+
+  # Feed Processing SQS Queue Resource
+  FeedProcessingQueue:
+    Type: AWS::SQS::Queue
+    DependsOn: FeedProcessingDeadLetterQueue
+    Properties:
+      QueueName: !Sub ${Stage}-feed-processing-queue
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FeedProcessingDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  FeedProcessingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${Stage}-feed-processing-dlqueue
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600
+
+  # ------------------------------------------------------------------------------------
+  # Event Bridge Role Resource
+  # ------------------------------------------------------------------------------------
+
+  # Event Bridge Scheduler Role
+  EventBridgeSchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaRole
+        - arn:aws:iam::aws:policy/AmazonEventBridgeSchedulerFullAccess
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+
+  FeedProcessingSQSPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref FeedProcessingQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowSPAPIAccess
+            Effect: Allow
+            Principal:
+              AWS: '437568002678'
+            Action:
+              - sqs:GetQueueAttributes
+              - sqs:SendMessage
+            Resource: !GetAtt FeedProcessingQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:*
+
+  # ------------------------------------------------------------------------------------
+  # Lambda Function Resources
+  # ------------------------------------------------------------------------------------
+
+  # Demo lambda function for testing
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/app.lambdaHandler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      Events:
+        HelloWorld:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /hello
+            Method: get
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageInventoryTable
+        - Statement:
+            Effect: Allow
+            Action: sqs:*
+            Resource: !GetAtt ProcessedDataQueue.Arn
+    Metadata:
+      # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: false
+        EntryPoints:
+          - src/handlers/app.ts
+
+  # Data Processing Lambda Function
+  DataProcessingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/data-processing.lambdaHandler
+      Runtime: nodejs22.x
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageInventoryTable
+        - Statement:
+            Effect: Allow
+            Action: sqs:*
+            Resource: !GetAtt ProcessedDataQueue.Arn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:*
+              Resource:
+                - !GetAtt ManageInventoryTable.Arn
+                - !GetAtt ManageSkuTable.Arn
+    Metadata:
+      # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: false
+        EntryPoints:
+          - src/handlers/data-processing.ts
+
+  # Inventory Feed Lambda Function
+  InventoryFeedFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/inventory-feed.lambdaHandler
+      Runtime: nodejs22.x
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ProcessedDataQueue.Arn
+            BatchSize: 10
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:*
+              Resource: !GetAtt ManageInventoryTable.Arn
+    Metadata:
+      # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: false
+        EntryPoints:
+          - src/handlers/inventory-feed.ts
+
+  # Update Amazon Feed Status Function
+  UpdateFeedFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/update-feed-status.lambdaHandler
+      Runtime: nodejs22.x
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageInventoryTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:*
+              Resource: !GetAtt ManageInventoryTable.Arn
+    Metadata:
+      # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: false
+        EntryPoints:
+          - src/handlers/update-feed-status.ts
+
+  # Handle Order Function
+  HandleOrderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/handle-order.lambdaHandler
+      Runtime: nodejs22.x
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageOrderTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageOrderItemsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageSkuTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageInventoryTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:*
+              Resource:
+                - !GetAtt ManageOrderTable.Arn
+                - !GetAtt ManageOrderItemsTable.Arn
+                - !GetAtt ManageSkuTable.Arn
+                - !GetAtt ManageInventoryTable.Arn
+        - Statement:
+            Effect: Allow
+            Action: sqs:*
+            Resource: !GetAtt CreateOrderQueue.Arn
+    Metadata:
+      # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: false
+        EntryPoints:
+          - src/handlers/handle-order.ts
+
+  # Create order to DDI Function
+  CreateOrderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/create-order.lambdaHandler
+      Runtime: nodejs22.x
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CreateOrderQueue.Arn
+            BatchSize: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageOrderTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageOrderItemsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:*
+              Resource:
+                - !GetAtt ManageOrderTable.Arn
+                - !GetAtt ManageOrderItemsTable.Arn
+    Metadata:
+      # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: false
+        EntryPoints:
+          - src/handlers/create-order.ts
+
+  # Handle Not Synced Orders Function
+  HandleNotSyncedOrderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/handle-not-synced-orders.lambdaHandler
+      Runtime: nodejs22.x
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageOrderTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageOrderItemsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageSkuTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ManageInventoryTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:*
+              Resource:
+                - !GetAtt ManageOrderTable.Arn
+                - !GetAtt ManageOrderItemsTable.Arn
+                - !GetAtt ManageSkuTable.Arn
+                - !GetAtt ManageInventoryTable.Arn
+    Metadata:
+      # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: false
+        EntryPoints:
+          - src/handlers/handle-not-synced-orders.ts
+
+  # ------------------------------------------------------------------------------------
+  # Cron Scheduler Resources
+  # ------------------------------------------------------------------------------------
+
+  # Cron Scheduler
+  CronScheduler:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      ScheduleExpression: cron(*/10 * * * ? *) # Running every 10 minutes
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: !GetAtt DataProcessingFunction.Arn
+        RoleArn: !GetAtt EventBridgeSchedulerRole.Arn
+        Input: '{}'
+
+  # Update Feed Cron Scheduler
+  UpdateFeedCronScheduler:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      ScheduleExpression: cron(*/05 * * * ? *) # Running every 05 minutes
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: !GetAtt UpdateFeedFunction.Arn
+        RoleArn: !GetAtt EventBridgeSchedulerRole.Arn
+        Input: '{}'
+
+  # Create Order Cron Scheduler
+  CreateOrderCronScheduler:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      ScheduleExpression: cron(*/15 * * * ? *) # Running 15 minutes
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: !GetAtt HandleOrderFunction.Arn
+        RoleArn: !GetAtt EventBridgeSchedulerRole.Arn
+        Input: '{}'
+
+  # Handle Order Creation Failed Cron Scheduler
+  HandleNotSyncedOrderCronScheduler:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      ScheduleExpression: cron(0 */6 * * ? *) # Running every 6 hours
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: !GetAtt HandleNotSyncedOrderFunction.Arn
+        RoleArn: !GetAtt EventBridgeSchedulerRole.Arn
+        Input: '{}'
+
+  # Layer
+  SpLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: SpLayer
+      Description: Node.js external libraries
+      ContentUri: dependencies/
+      CompatibleRuntimes:
+        - nodejs22.x
+      LicenseInfo: MIT
+    Metadata:
+      BuildMethod: nodejs22.x
+
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name: !Sub ApplicationInsights-SAM-${AWS::StackName}
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName: !Ref ApplicationResourceGroup
+      AutoConfigurationEnabled: 'true'
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  HelloWorldApi:
+    Description: API Gateway endpoint URL for Prod stage for Hello World function
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/
+  HelloWorldFunction:
+    Description: Hello World Lambda Function ARN
+    Value: !GetAtt HelloWorldFunction.Arn

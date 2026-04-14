@@ -1,0 +1,11 @@
+version = 0.1
+[asc-main]
+[asc-main.deploy]
+[asc-main.deploy.parameters]
+stack_name = "asc-main"
+resolve_s3 = true
+s3_prefix = "asc-main"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM"
+parameter_overrides = "Stage=\"prod\" Release=\"1.1.30\" LambdaPandasLayerKey=\"arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python312:15\" LambdaPowerToolsLayerKey=\"arn:aws:lambda:us-east-1:017000801446:layer:AWSLambdaPowertoolsPython:21\""
+image_repositories = []
