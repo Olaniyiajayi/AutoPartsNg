@@ -167,7 +167,7 @@ Resources:
       StageName: !Sub ${Stage}
       TracingEnabled: true
       EndpointConfiguration: REGIONAL
-      DisableExecuteApiEndpoint: true
+      DisableExecuteApiEndpoint: false
       DefinitionBody:
         Fn::Transform:
           Name: AWS::Include
