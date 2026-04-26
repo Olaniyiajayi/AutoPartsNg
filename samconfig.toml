@@ -1,0 +1,20 @@
+version = 0.1
+[dev]
+[dev.deploy]
+[dev.deploy.parameters]
+stack_name = "dev"
+resolve_s3 = true
+s3_prefix = "dev"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
+parameter_overrides = "Stage=\"dev\" LambdaPowerToolsLayerKey=\"arn:aws:lambda:us-east-1:017000801446:layer:AWSLambdaPowertoolsPythonV2:68\" Release=\"1.1.40\" Debug=\"false\" IdempotencyExpiry=\"300\" Table=\"dev\" IdempotencyTable=\"arn:aws:dynamodb:us-east-1:151753034620:table/dev-idempotency\" EventBusName=\"dev\""
+
+[prod]
+[prod.deploy]
+[prod.deploy.parameters]
+stack_name = "prod"
+resolve_s3 = true
+s3_prefix = "prod"
+region = "ap-southeast-2"
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
+parameter_overrides = "Stage=\"prod\" LambdaPowerToolsLayerKey=\"arn:aws:lambda:ap-southeast-2:017000801446:layer:AWSLambdaPowertoolsPythonV2:68\" Release=\"2.4.48\" Debug=\"false\" IdempotencyExpiry=\"30\" Table=\"prod\" IdempotencyTable=\"arn:aws:dynamodb:ap-southeast-2:202401820188:table/prod-idempotency\" EventBusName=\"prod\""

@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template for AutoPartsNg
+Parameters:
+  Stage:
+    Type: String
+    Default: dev-v5
+  LambdaPowerToolsLayerKey:
+    Type: String
+    Default: arn:aws:lambda:ap-southeast-2:123456789012:layer:powertools:1
+  Release:
+    Type: String
+    Default: '1.0'
+  Debug:
+    Type: String
+    Default: 'false'
+  TableArn:
+    Type: String
+    Default: arn:aws:dynamodb:ap-southeast-2:123456789012:table/dummy
+  IdempotencyExpiry:
+    Type: String
+    Default: '3600'
+  Table:
+    Type: String
+    Default: dummy-table
+  IdempotencyTable:
+    Type: String
+    Default: dummy-idempotency-table
+  EventBusName:
+    Type: String
+    Default: dummy-event-bus
+Resources:
+  OpenSearchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AWSLambdaExecute
+      - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+      - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      - arn:aws:iam::aws:policy/AmazonECS_FullAccess
+      Policies:
+      - PolicyName: OpenSearchPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - es:*
+            Resource: '*'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+            - ecs-tasks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+  AuthoriserService:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: AuthoriserService/template.yaml
+      Parameters:
+        Stage:
+          Ref: Stage
+        LambdaPowerToolsLayerKey:
+          Ref: LambdaPowerToolsLayerKey
+    Metadata:
+      SamResourceId: AuthoriserService
+  ContactService:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ContactService/template.yaml
+      Parameters:
+        LambdaPowerToolsLayerKey:
+          Ref: LambdaPowerToolsLayerKey
+        Stage:
+          Ref: Stage
+        Table:
+          Ref: Table
+        Debug:
+          Ref: Debug
+        Release:
+          Ref: Release
+        LambdaAuthFunctionArn:
+          Fn::GetAtt:
+          - AuthoriserService
+          - Outputs.LambdaAuthFunction
+        IdempotencyTable:
+          Ref: IdempotencyTable
+        IdempotencyExpiry:
+          Ref: IdempotencyExpiry
+        EventBusName:
+          Ref: EventBusName
+    Metadata:
+      SamResourceId: ContactService
