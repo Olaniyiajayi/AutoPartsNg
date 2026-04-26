@@ -7,7 +7,7 @@ resolve_s3 = true
 s3_prefix = "dev"
 region = "us-east-1"
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
-parameter_overrides = "Stage=\"dev\" LambdaPowerToolsLayerKey=\"arn:aws:lambda:us-east-1:017000801446:layer:AWSLambdaPowertoolsPythonV2:68\" Release=\"1.1.40\" Debug=\"false\" IdempotencyExpiry=\"300\" Table=\"dev\" IdempotencyTable=\"arn:aws:dynamodb:us-east-1:151753034620:table/dev-idempotency\" EventBusName=\"dev\""
+parameter_overrides = "Stage=\"dev\" LambdaPowerToolsLayerKey=\"arn:aws:lambda:us-east-1:017000801446:layer:AWSLambdaPowertoolsPythonV2:68\" Release=\"1.1.40\" Debug=\"false\" IdempotencyExpiry=\"300\" Table=\"dev\" IdempotencyTable=\"arn:aws:dynamodb:us-east-1:608283508669:table/dev-idempotency\" EventBusName=\"dev\""
 
 [prod]
 [prod.deploy]
