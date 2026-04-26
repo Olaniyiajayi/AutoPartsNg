@@ -36,11 +36,8 @@ logger = Logger()
 table_name = getenv("TableName")
 idempotency_expiry = int(getenv("IdempotencyExpiry"))
 idempotency_table = getenv("IdempotencyTableName")
-SENTRY_DNS = getenv("SENTRY_DNS")
 DEBUG = getenv("DEBUG")
 RELEASE = getenv("RELEASE")
-TRACES_SENTRY_SAMPLE_RATE = float(getenv("TRACES_SENTRY_SAMPLE_RATE"))
-PROFILE_SAMPLE_RATE = float(getenv("PROFILE_SAMPLE_RATE"))
 
 
 # table

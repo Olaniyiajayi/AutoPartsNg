@@ -11,8 +11,6 @@ from typing import Callable
 # third party imports
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.parser import ValidationError
-from sentry_sdk import capture_exception, init
-from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
 
 # local imports
 from validations import (
@@ -117,7 +115,6 @@ logger = BufferedLogger(base_logger)
 
 # environment variables
 stage = getenv("Stage")
-SENTRY_DNS = getenv("SENTRY_DNS")
 DEBUG = False
 RELEASE = getenv("RELEASE")
 TRACES_SENTRY_SAMPLE_RATE = float(getenv("TRACES_SENTRY_SAMPLE_RATE", "0.0"))
@@ -135,20 +132,6 @@ def handle_validation_error(status_code: int, message: str, error: Exception) ->
     """
     # Log the error
     logger.error(message + ": " + str(error))
-
-    # Initialize Sentry only if in production
-    if stage == "prod-v5":
-        init(
-            dsn=SENTRY_DNS,
-            debug=DEBUG,
-            release=RELEASE,
-            traces_sample_rate=TRACES_SENTRY_SAMPLE_RATE,
-            environment=stage,
-            profiles_sample_rate=PROFILE_SAMPLE_RATE,
-            integrations=[AwsLambdaIntegration(timeout_warning=True)],
-        )
-
-        capture_exception(error)
 
     return {
         "statusCode": status_code,

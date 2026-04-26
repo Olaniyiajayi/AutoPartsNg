@@ -3,6 +3,5 @@ requests
 PyMySQL
 opensearch-py
 requests_aws4auth
-sentry-sdk
 algoliasearch>=2.0,<3.0
 deepdiff
