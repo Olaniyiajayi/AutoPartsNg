@@ -49,7 +49,7 @@ table = dynamodb.Table(table_name)
 # initialize response
 response = {
     "statusCode": 500,
-    "headers": {"access-control-allow-origin": "*"},
+    "headers": {"Access-Control-Allow-Origin": "*"},
     "body": None,
 }
 

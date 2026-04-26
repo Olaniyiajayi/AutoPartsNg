@@ -120,8 +120,8 @@ stage = getenv("Stage")
 SENTRY_DNS = getenv("SENTRY_DNS")
 DEBUG = False
 RELEASE = getenv("RELEASE")
-TRACES_SENTRY_SAMPLE_RATE = float(getenv("TRACES_SENTRY_SAMPLE_RATE"))
-PROFILE_SAMPLE_RATE = float(getenv("PROFILE_SAMPLE_RATE"))
+TRACES_SENTRY_SAMPLE_RATE = float(getenv("TRACES_SENTRY_SAMPLE_RATE", "0.0"))
+PROFILE_SAMPLE_RATE = float(getenv("PROFILE_SAMPLE_RATE", "1.0"))
 
 
 def handle_validation_error(status_code: int, message: str, error: Exception) -> dict:
@@ -152,7 +152,7 @@ def handle_validation_error(status_code: int, message: str, error: Exception) ->
 
     return {
         "statusCode": status_code,
-        "headers": {"access-control-allow-origin": "*"},
+        "headers": {"Access-Control-Allow-Origin": "*"},
         "body": f"{message}: {error}",
     }
 

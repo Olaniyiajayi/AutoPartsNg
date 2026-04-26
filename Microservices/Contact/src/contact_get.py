@@ -17,7 +17,7 @@ from validations import DatabaseError
 # Initialise response
 response = {
     "statusCode": 500,
-    "headers": {"access-control-allow-origin": "*"},
+    "headers": {"Access-Control-Allow-Origin": "*"},
     "body": None,
 }
 
