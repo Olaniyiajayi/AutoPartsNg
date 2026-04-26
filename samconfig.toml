@@ -17,4 +17,4 @@ resolve_s3 = true
 s3_prefix = "prod"
 region = "ap-southeast-2"
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
-parameter_overrides = "Stage=\"prod\" LambdaPowerToolsLayerKey=\"arn:aws:lambda:ap-southeast-2:017000801446:layer:AWSLambdaPowertoolsPythonV2:68\" Release=\"2.4.48\" Debug=\"false\" IdempotencyExpiry=\"30\" Table=\"prod\" IdempotencyTable=\"arn:aws:dynamodb:ap-southeast-2:202401820188:table/prod-idempotency\" EventBusName=\"prod\""
+parameter_overrides = "Stage=\"prod\" LambdaPowerToolsLayerKey=\"arn:aws:lambda:ap-southeast-2:017000801446:layer:AWSLambdaPowertoolsPythonV2:68\" Release=\"2.4.48\" Debug=\"false\" IdempotencyExpiry=\"30\" Table=\"prod\" IdempotencyTable=\"arn:aws:dynamodb:ap-southeast-2:608283508669:table/prod-idempotency\" EventBusName=\"prod\""
