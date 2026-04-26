@@ -152,7 +152,7 @@ def handle_validation_error(status_code: int, message: str, error: Exception) ->
 
     return {
         "statusCode": status_code,
-        "headers": {"access-control-allow-origin": "*"},
+        "headers": {"Access-Control-Allow-Origin": "*"},
         "body": f"{message}: {error}",
     }
 
