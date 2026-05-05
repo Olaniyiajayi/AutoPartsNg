@@ -85,3 +85,18 @@ Resources:
         IdempotencyTable: !Ref IdempotencyTable
         IdempotencyExpiry: !Ref IdempotencyExpiry
         EventBusName: !Ref EventBusName
+
+  PartService:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: Microservices/Part/template.yml
+      Parameters:
+        LambdaPowerToolsLayerKey: !Ref LambdaPowerToolsLayerKey
+        Stage: !Ref Stage
+        Table: !Ref Table
+        Debug: !Ref Debug
+        Release: !Ref Release
+        LambdaAuthFunctionArn: !GetAtt AuthoriserService.Outputs.LambdaAuthFunction
+        IdempotencyTable: !Ref IdempotencyTable
+        IdempotencyExpiry: !Ref IdempotencyExpiry
+        EventBusName: !Ref EventBusName

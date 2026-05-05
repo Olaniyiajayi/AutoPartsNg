@@ -1,0 +1,123 @@
+openapi: 3.0.3
+info:
+  version: 3.0.0
+  title: Genius Autos Inventory Part API
+tags:
+  - name: VehicleService
+    description: All API endpoints part of the Part services
+components:
+  securitySchemes:
+    Authorizer:
+      type: "apiKey"
+      name: "Authorization"
+      in: "header"
+      x-amazon-apigateway-authtype: "custom"
+      x-amazon-apigateway-authorizer:
+        authorizerUri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaAuthFunctionArn}/invocations
+        authorizerCredentials:
+          Fn::Sub: "${PartApiGatewayRole.Arn}"
+        authorizerResultTtlInSeconds: 30
+        type: "token"
+
+paths:
+  /:
+    post:
+      security:
+        - Authorizer: []
+      description: Create New part instance
+      tags:
+      - PartService
+      responses:
+        '200':
+          description: OK
+      x-amazon-apigateway-integration:
+        credentials:
+          Fn::Sub: "${PartApiGatewayRole.Arn}"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PartPostFunction.Arn}/invocations
+    put:
+      security:
+        - Authorizer: []
+      description: Edit Existing part instance
+      tags:
+      - PartService
+      responses:
+        '200':
+          description: OK
+      x-amazon-apigateway-integration:
+        credentials:
+          Fn::Sub: "${PartApiGatewayRole.Arn}"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PartPutFunction.Arn}/invocations
+    get:
+      security:
+        - Authorizer: []
+      description: Get part instance
+      tags:
+      - PartService
+      responses:
+        '200':
+          description: OK
+      x-amazon-apigateway-integration:
+        credentials:
+          Fn::Sub: "${PartApiGatewayRole.Arn}"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PartGetFunction.Arn}/invocations
+    delete:
+      security:
+        - Authorizer: []
+      description: Delete part instance
+      tags:
+      - PartService
+      responses:
+        '200':
+          description: OK
+      x-amazon-apigateway-integration:
+        credentials:
+          Fn::Sub: "${PartApiGatewayRole.Arn}"
+        httpMethod: POST
+        type: aws_proxy
+        passthroughBehavior: when_no_match
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PartArchiveFunction.Arn}/invocations
+    options:
+      tags:
+      - PartService
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: 200 response
+          schema:
+            $ref: "#/definitions/Empty"
+          headers:
+            Access-Control-Allow-Origin:
+              type: string
+            Access-Control-Allow-Methods:
+              type: string
+            Access-Control-Allow-Headers:
+              type: string
+      x-amazon-apigateway-integration:
+        responses:
+          default:
+            statusCode: 200
+            responseParameters:
+              method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Origin:  "'*'"
+        passthroughBehavior: when_no_match
+        requestTemplates:
+          application/json: "{\"statusCode\": 200}"
+        type: mock

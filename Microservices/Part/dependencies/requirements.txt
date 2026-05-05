@@ -1,0 +1,7 @@
+boto3
+requests
+PyMySQL
+opensearch-py
+requests_aws4auth
+algoliasearch>=2.0,<3.0
+deepdiff

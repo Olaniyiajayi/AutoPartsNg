@@ -1,0 +1,206 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Part Service
+  Root stack for part service
+
+Parameters:
+  LambdaPowerToolsLayerKey:
+    Type: String
+  Stage:
+    Type: String
+  Table:
+    Type: String
+  Release: 
+    Type: String
+  Debug:
+    Type: String
+  LambdaAuthFunctionArn:
+    Type: String
+  IdempotencyTable:
+    Type: String
+  IdempotencyExpiry:
+    Type: String
+  EventBusName:
+    Type: String
+
+Conditions:
+  IsNotDev: !Not [!Equals [!Ref Stage, "dev-v5"]]
+
+Globals:
+  Function:
+      MemorySize: 1408
+      Layers:
+        - !Ref LambdaPowerToolsLayerKey
+        - !Ref PartServiceLayer
+      Runtime: python3.12
+      Architectures:
+      - x86_64
+      Tracing: Active
+      Timeout: 900
+      Environment:
+        Variables:
+          Stage: !Sub ${Stage}
+          TableName: !Ref Table
+          POWERTOOLS_SERVICE_NAME: PART
+          RELEASE: !Ref Release
+          DEBUG: !Ref Debug
+          IdempotencyTableName: !Ref IdempotencyTable
+          IdempotencyExpiry: !Ref IdempotencyExpiry
+          EventBusName: !Ref EventBusName
+          POWERTOOLS_LOG_LEVEL: WARN
+
+Resources:
+
+  PartServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Policies:
+        - PolicyName: IdempotencyTableAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:DeleteItem'
+                  - 'dynamodb:Query'
+                Resource: !Ref IdempotencyTable
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonEC2FullAccess'
+        - 'arn:aws:iam::aws:policy/AWSLambdaExecute'
+        - 'arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+
+  PartPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Description: "Function for Part Post"
+      Handler: part_post.handler
+      Role: !GetAtt PartServiceRole.Arn
+
+  PartGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Description: "Function for Part Get"
+      Handler: part_get.handler
+      Role: !GetAtt PartServiceRole.Arn
+
+  PartReportBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  PartPutFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Description: "Function for Part Put"
+      Handler: part_put.handler
+      Role: !GetAtt PartServiceRole.Arn
+
+  PartArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Description: "Archive Part"
+      Handler: part_archive.handler
+      Role: !GetAtt PartServiceRole.Arn
+
+  PartServiceLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: PartServiceLayer
+      Description: Dependencies for the part service Lambda function
+      ContentUri: dependencies/
+      CompatibleRuntimes:
+        - python3.12
+      LicenseInfo: MIT
+    Metadata:
+      BuildMethod: python3.12
+
+  PartApiGatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs'
+        - 'arn:aws:iam::aws:policy/CloudWatchFullAccess'
+        - 'arn:aws:iam::aws:policy/AWSLambdaExecute'
+        - 'arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'apigateway.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'LambdaInvoke'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource:
+                  - '*'
+
+  PartApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Sub ${Stage}
+      TracingEnabled: true
+      EndpointConfiguration: REGIONAL
+      DisableExecuteApiEndpoint: false
+      DefinitionBody:
+        Fn::Transform:
+          Name: AWS::Include
+          Parameters:
+            Location: part-api.yml
+
+Outputs:
+  PartArchiveFunction:
+    Value: !GetAtt PartArchiveFunction.Arn
+
+  PartPutFunction:
+    Value: !GetAtt PartPutFunction.Arn
+
+  PartPostFunction:
+    Value: !GetAtt PartPostFunction.Arn
+
+  PartGetFunction:
+    Value: !GetAtt PartGetFunction.Arn
+
+  LambdaAuthFunctionArn:
+    Value: !Ref LambdaAuthFunctionArn
+  PartApiGatewayApiID:
+    Value: !Ref PartApiGatewayApi
