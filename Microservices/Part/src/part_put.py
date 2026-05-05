@@ -97,20 +97,20 @@ def get_part(tenant_id: str, part_id: str) -> dict:
     return item
 
 
-def main(tenant_id: str, user_id: str, event_body: dict):
+def main(tenant_id: str, user_id: str, body: dict):
     """
     Main function to update a part
     Args:
         tenant_id: str
         user_id: str
-        event_body: dict
+        body: dict
     Returns:
         dict
     """
     logger.info("INSIDE MAIN FUNCTION")
     try:
         # Validate payload
-        payload = validate_payload(event_body, PartPut)
+        payload = validate_payload(body, PartPut)
     except Exception as error:
         logger.error("Error validating payload: %s", error)
         raise ValueError(f"Error validating payload: {error}") from error
@@ -190,5 +190,6 @@ def handler(event, context):
     """
     tenant_id = event["requestContext"]["authorizer"]["tenant_id"]
     user_id = event["requestContext"]["authorizer"]["user_name"]
+    body = loads(event.get("body"))
 
-    return main(tenant_id, user_id, loads(event.get("body")))
+    return main(tenant_id, user_id, body)

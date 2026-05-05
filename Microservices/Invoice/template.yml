@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Part Service
-  Root stack for part service
+  Invoice Service
+  Root stack for invoice service
 
 Parameters:
   LambdaPowerToolsLayerKey:
@@ -11,7 +11,7 @@ Parameters:
     Type: String
   Table:
     Type: String
-  Release: 
+  Release:
     Type: String
   Debug:
     Type: String
@@ -24,15 +24,12 @@ Parameters:
   EventBusName:
     Type: String
 
-Conditions:
-  IsNotDev: !Not [!Equals [!Ref Stage, "dev-v5"]]
-
 Globals:
   Function:
       MemorySize: 1408
       Layers:
         - !Ref LambdaPowerToolsLayerKey
-        - !Ref PartServiceLayer
+        - !Ref InvoiceServiceLayer
       Runtime: python3.12
       Architectures:
       - x86_64
@@ -42,7 +39,7 @@ Globals:
         Variables:
           Stage: !Sub ${Stage}
           TableName: !Ref Table
-          POWERTOOLS_SERVICE_NAME: PART
+          POWERTOOLS_SERVICE_NAME: INVOICE
           RELEASE: !Ref Release
           DEBUG: !Ref Debug
           IdempotencyTableName: !Ref IdempotencyTable
@@ -52,7 +49,7 @@ Globals:
 
 Resources:
 
-  PartServiceRole:
+  InvoiceServiceRole:
     Type: AWS::IAM::Role
     Properties:
       Policies:
@@ -85,108 +82,43 @@ Resources:
             Action:
               - 'sts:AssumeRole'
 
-  PartPostFunction:
+  InvoicePostFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/
-      Description: "Function for Part Post"
-      Handler: part_post.handler
-      Role: !GetAtt PartServiceRole.Arn
+      Description: "Function for Invoice Post"
+      Handler: invoice_post.handler
+      Role: !GetAtt InvoiceServiceRole.Arn
 
-  PartGetFunction:
+  InvoiceGetFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/
-      Description: "Function for Part Get"
-      Handler: part_get.handler
-      Role: !GetAtt PartServiceRole.Arn
+      Description: "Function for Invoice Get"
+      Handler: invoice_get.handler
+      Role: !GetAtt InvoiceServiceRole.Arn
 
-  PartReportBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      VersioningConfiguration:
-        Status: Enabled
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-
-  PartPutFunction:
+  InvoicePutFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/
-      Description: "Function for Part Put"
-      Handler: part_put.handler
-      Role: !GetAtt PartServiceRole.Arn
+      Description: "Function for Invoice Put"
+      Handler: invoice_put.handler
+      Role: !GetAtt InvoiceServiceRole.Arn
 
-  PartArchiveFunction:
+  InvoiceArchiveFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/
-      Description: "Archive Part"
-      Handler: part_archive.handler
-      Role: !GetAtt PartServiceRole.Arn
+      Description: "Archive Invoice"
+      Handler: invoice_archive.handler
+      Role: !GetAtt InvoiceServiceRole.Arn
 
-  PartHandleInvoiceCreatedFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/
-      Description: "Handle invoice created events for part stock"
-      Handler: handle.invoice_created.handler
-      Role: !GetAtt PartServiceRole.Arn
-      Events:
-        InvoiceCreatedEvent:
-          Type: EventBridgeRule
-          Properties:
-            EventBusName: !Ref EventBusName
-            Pattern:
-              source:
-                - INVOICE
-              detail-type:
-                - InvoiceCreated
-
-  PartHandleInvoiceUpdatedFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/
-      Description: "Handle invoice updated events for part stock"
-      Handler: handle.invoice_updated.handler
-      Role: !GetAtt PartServiceRole.Arn
-      Events:
-        InvoiceUpdatedEvent:
-          Type: EventBridgeRule
-          Properties:
-            EventBusName: !Ref EventBusName
-            Pattern:
-              source:
-                - INVOICE
-              detail-type:
-                - InvoiceUpdated
-
-  PartHandleInvoiceDeletedFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/
-      Description: "Handle invoice deleted events for part stock"
-      Handler: handle.invoice_deleted.handler
-      Role: !GetAtt PartServiceRole.Arn
-      Events:
-        InvoiceDeletedEvent:
-          Type: EventBridgeRule
-          Properties:
-            EventBusName: !Ref EventBusName
-            Pattern:
-              source:
-                - INVOICE
-              detail-type:
-                - InvoiceDeleted
-
-  PartServiceLayer:
+  InvoiceServiceLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: PartServiceLayer
-      Description: Dependencies for the part service Lambda function
+      LayerName: InvoiceServiceLayer
+      Description: Dependencies for the invoice service Lambda function
       ContentUri: dependencies/
       CompatibleRuntimes:
         - python3.12
@@ -194,7 +126,7 @@ Resources:
     Metadata:
       BuildMethod: python3.12
 
-  PartApiGatewayRole:
+  InvoiceApiGatewayRole:
     Type: AWS::IAM::Role
     Properties:
       ManagedPolicyArns:
@@ -228,7 +160,7 @@ Resources:
                 Resource:
                   - '*'
 
-  PartApiGatewayApi:
+  InvoiceApiGatewayApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: !Sub ${Stage}
@@ -239,31 +171,23 @@ Resources:
         Fn::Transform:
           Name: AWS::Include
           Parameters:
-            Location: part-api.yml
+            Location: invoice-api.yml
 
 Outputs:
-  PartArchiveFunction:
-    Value: !GetAtt PartArchiveFunction.Arn
+  InvoiceArchiveFunction:
+    Value: !GetAtt InvoiceArchiveFunction.Arn
 
-  PartPutFunction:
-    Value: !GetAtt PartPutFunction.Arn
+  InvoicePutFunction:
+    Value: !GetAtt InvoicePutFunction.Arn
 
-  PartPostFunction:
-    Value: !GetAtt PartPostFunction.Arn
+  InvoicePostFunction:
+    Value: !GetAtt InvoicePostFunction.Arn
 
-  PartGetFunction:
-    Value: !GetAtt PartGetFunction.Arn
-
-  PartHandleInvoiceCreatedFunction:
-    Value: !GetAtt PartHandleInvoiceCreatedFunction.Arn
-
-  PartHandleInvoiceUpdatedFunction:
-    Value: !GetAtt PartHandleInvoiceUpdatedFunction.Arn
-
-  PartHandleInvoiceDeletedFunction:
-    Value: !GetAtt PartHandleInvoiceDeletedFunction.Arn
+  InvoiceGetFunction:
+    Value: !GetAtt InvoiceGetFunction.Arn
 
   LambdaAuthFunctionArn:
     Value: !Ref LambdaAuthFunctionArn
-  PartApiGatewayApiID:
-    Value: !Ref PartApiGatewayApi
+
+  InvoiceApiGatewayApiID:
+    Value: !Ref InvoiceApiGatewayApi

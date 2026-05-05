@@ -81,22 +81,22 @@ def get_parts(tenant_id: str) -> dict:
     return parts
 
 
-def main(tenant_id: str, query_params: dict) -> dict:
+def main(tenant_id: str, user_id: str, body: dict) -> dict:
     """
     Main Function
     Args:
         tenant_id: str
-        query_params: dict
+        body: dict
     Returns:
         dict
     """
     logger.info("INSIDE MAIN FUNCTION")
-    logger.info("Query Params: %s", query_params)
+    logger.info("Query Params: %s", body)
 
-    if not query_params:
-        query_params = {}
+    if not body:
+        body = {}
 
-    part_id = query_params.get("part_id")
+    part_id = body.get("part_id")
 
     if part_id:
         try:
@@ -129,5 +129,7 @@ def handler(event, context):
     """Lambda handler function"""
 
     tenant_id = event["requestContext"]["authorizer"]["tenant_id"]
+    user_id = event["requestContext"]["authorizer"]["user_name"]
+    body = event["queryStringParameters"]
 
-    return main(tenant_id, event["queryStringParameters"])
+    return main(tenant_id, user_id, body)

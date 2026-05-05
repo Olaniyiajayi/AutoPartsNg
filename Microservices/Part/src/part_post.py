@@ -133,20 +133,20 @@ def store_part(item: dict) -> bool:
     return True
 
 
-def main(tenant_id: str, user_id: str, event_body: dict):
+def main(tenant_id: str, user_id: str, body: dict):
     """
     Main function to create a part
     Args:
         tenant_id: str
         user_id: str
-        event_body: dict
+        body: dict
     Returns:
         dict
     """
     logger.info("INSIDE MAIN FUNCTION")
     try:
         # Validate payload
-        payload = validate_payload(event_body, PartPost)
+        payload = validate_payload(body, PartPost)
     except Exception as error:
         logger.error("Error validating payload: %s", error)
         raise ValueError(f"Error validating payload: {error}") from error
@@ -228,5 +228,6 @@ def handler(event, context):
     # get tenant_id from event
     tenant_id = event["requestContext"]["authorizer"]["tenant_id"]
     user_id = event["requestContext"]["authorizer"]["user_name"]
+    body = loads(event.get("body"))
 
-    return main(tenant_id, user_id, loads(event.get("body")))
+    return main(tenant_id, user_id, body)

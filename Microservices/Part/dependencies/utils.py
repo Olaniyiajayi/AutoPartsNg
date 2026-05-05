@@ -8,8 +8,9 @@ from json import JSONEncoder, dumps
 from time import time
 from typing import Any, Optional
 from uuid import uuid4
+from datetime import datetime, timezone
 from os import environ, getenv
-from boto3 import client
+from boto3 import client, resource
 
 # Third party imports
 from aws_lambda_powertools import Logger
@@ -26,6 +27,9 @@ EVENT_BUS_NAME = environ["EventBusName"]
 
 # eventbridge client
 eventbridge = client("events")
+dynamodb = resource("dynamodb")
+table_name = getenv("TableName")
+table = dynamodb.Table(table_name)
 
 class DecimalEncoder(JSONEncoder):
     """Handle decimal encoding
@@ -125,6 +129,61 @@ def validate_payload(event: dict, model: Any) -> dict:
         return parse(event=event, model=model)
     except ValidationError as e:
         raise ValueError(e) from e
+
+
+def get_detail_body(event: dict) -> dict:
+    """Extract the body emitted by service send_event helpers."""
+    detail = event.get("detail", {})
+    return detail.get("body", detail)
+
+
+def quantity_by_part(items: list) -> dict:
+    """Aggregate invoice quantities by part_id."""
+    quantities = {}
+    for item in items or []:
+        part_id = item.get("part_id")
+        quantity = item.get("quantity", 0)
+        if not part_id:
+            continue
+        quantities[part_id] = quantities.get(part_id, 0) + int(quantity)
+    return quantities
+
+
+def apply_quantity_delta(tenant_id: str, part_id: str, delta: int) -> dict:
+    """Add a signed delta to a part's available quantity."""
+    if delta == 0:
+        logger.info("Skipping zero quantity delta for part %s", part_id)
+        return {}
+
+    logger.info("Applying quantity delta %s to part %s", delta, part_id)
+    result = table.update_item(
+        Key={"pk": f"TENANT#{tenant_id}", "sk": f"PART#{part_id}"},
+        UpdateExpression="SET updated_at = :updated_at ADD quantity_available :delta",
+        ExpressionAttributeValues={
+            ":updated_at": datetime.now(timezone.utc).isoformat(),
+            ":delta": Decimal(delta),
+        },
+        ConditionExpression="attribute_exists(pk) AND attribute_exists(sk)",
+        ReturnValues="ALL_NEW",
+    )
+    return result.get("Attributes")
+
+
+def apply_invoice_items(tenant_id: str, items: list, sign: int) -> None:
+    """Apply all invoice item quantities using sign -1 for sold, +1 for restored."""
+    for part_id, quantity in quantity_by_part(items).items():
+        apply_quantity_delta(tenant_id, part_id, sign * quantity)
+
+
+def apply_invoice_update(tenant_id: str, old_items: list, new_items: list) -> None:
+    """Apply the inventory delta between old and new invoice items."""
+    old_quantities = quantity_by_part(old_items)
+    new_quantities = quantity_by_part(new_items)
+    part_ids = set(old_quantities) | set(new_quantities)
+
+    for part_id in part_ids:
+        delta = old_quantities.get(part_id, 0) - new_quantities.get(part_id, 0)
+        apply_quantity_delta(tenant_id, part_id, delta)
 
 
 def get_algolia_index():
